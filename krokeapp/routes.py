@@ -1,274 +1,151 @@
 
 
+
+from flask import Blueprint
 from flask import jsonify, request, url_for, Response
-from krokeapp import app, db
-from datetime import datetime
-
+from krokeapp import db
 from krokeapp import logger
+from krokeapp.models import Player, Game, Team
+from krokeapp.status_codes import *
 
-
-# HTTP response codes
-
-UNPROCESSABLE = 422
-UNAUTHORIZED = 401
-
+api_routes = Blueprint('api', __name__, template_folder='templates')
 
 def get_from_dict(d, key_list):
-	""" 
-		Go deeper into the dictionary layer by layer 
-		and return the value of the key or None
-	"""
-	d_inner = d
-	for key in key_list:
-		d_inner = d_inner.get(key)
-		if d_inner is None:
-			return None
-
-	return d_inner
-
-
-
-# create a table for mapping multiple games to multiple players
-# game_player_table = db.Table('association', db.Base.metadata,
-#     db.Column('left_id', Integer, db.ForeignKey('left.id')),
-#     db.Column('right_id', Integer, db.ForeignKey('right.id'))
-# )
-
-
-class Game(db.Model):
-    # __tablename__ = 'right'
-
-    counter = 0
-
-    id = db.Column(db.Integer, primary_key=True)
-    created_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    name = db.Column(db.String(30), unique=False, nullable=False)
-
-    # set up owner relationships
-    #owner_id = db.Column(db.Integer, db.ForeignKey('player.id'))
-    #owner = db.relationship("Player", back_populates="owned_games", foreign_keys=['Player.owned_id'], uselist=False)
-    
-    # set up players in the game    
-    #players_id = db.Column(db.Integer, db.ForeignKey('player.id'))
-    #players = db.relationship('Player', back_populates='game', foreign_keys=['Player.players_id'])
-
-    owner_id = db.Column(db.Integer, db.ForeignKey('player.id', use_alter=True, name='fk_owner_id'))
-    owner = db.relationship('Player', foreign_keys=owner_id, post_update=True)
-    
-    # set the teams under games
-    teams = db.relationship('Team', backref='game')
-
-    def to_json(self):
-        return {
-                'id': self.id,
-                'name': self.name
-                }
-
-    @staticmethod
-    def games_to_json():
-        games = Game.query.all()
-        games_dict = { 'games': [] 	}
-        for game in games:
-            games_dict['games'].append(game.to_json())
-        return games_dict
-
-    @staticmethod
-    def by_id(gameid):
-        return Game.query.filter_by(id=gameid).first()		
-
-    @classmethod
-    def new_game(cls, creator, name=""):
-
-        Game.counter += 1
-
-        if not name:
-            name = "game" + str(Game.counter)
-
-        game = cls(name=name, owner=[creator])
-
-        db.session.add(game)
-        db.session.commit()
-
-        return game
-
-    def __repr__(self):
-        return f"Game {self.name} with players {self.players} and teams {self.teams}"
-
-
-class Player(db.Model):
-
-    # __tablename__ = 'left'  
-
-
-    id = db.Column(db.Integer, primary_key=True)
-    created_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    name = db.Column(db.String(30), unique=False, nullable=False)
-
-    # team relationships
-    team_id = db.Column(db.Integer,db.ForeignKey('team.id'), nullable=True)    
-
-    # each game has multiple players
-    # game_id = db.Column(db.Integer, db.ForeignKey('game.id'))
-    # game = db.relationship("Game", back_populates="players", foreign_keys=[game_id])
-
-    # # each player own multiple games
-    # owned_id = db.Column(db.Integer, db.ForeignKey('game.id'))
-    # owned_games = db.relationship("Game", back_populates="owner", foreign_keys=[owned_id])
-
-    player_id = db.Column(db.Integer, db.ForeignKey(Game.id))
-
-    # product gallery many-to-one
-    game = db.relationship(Game, foreign_keys=player_id, backref='players')
-
-
-    def __init__(self, name="", **kwargs):
-        if not name:
-            name = "anonymous"
-
-        kwargs['name'] = name
-        super().__init__(**kwargs)
-
-        db.session.add(self)
-        db.session.commit()
-
-    def to_json(self):
-        return { 'player': {
-                            'id': self.id,
-                            'name': self.name
-                            }
-                }
-
-    @staticmethod
-    def players_to_json():
-        players = Player.query.all()
-        pdict = {'players': []}
-        for player in players:
-            pdict['players'].append(player.to_json())
-
-        return pdict
-
-    @staticmethod
-    def by_id(playerid):
-        return Player.query.filter_by(id=playerid).first()
-
-
-
- 	
-    def auth(self, pid, hash_val):
-        """Check if the hash corresponds to the given id
-        	(At the moment hash = player id
-        """
-        player = Player.query.filter_by(id=hash_val).first()
-        if player is not None:
-            return player.id == pid
-        else:
-            return False
-
-
-
-    def __repr__(self):
-        return f"Player {self.name}"
-
-
-
-
-
-class Team(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    created_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    name = db.Column(db.String(30), unique=False, nullable=False)
-    
-    players = db.relationship('Player', backref='team', lazy=True) 
-
-    # each team is under a single game
-    game_id = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
-
-
-    @classmethod
-    def new_team(cls, game, owner, name=""):
-
-        name = name if name else "new_team"
-        team = cls(name=name, game=game, owner=owner, players=[owner])
-        
-        db.session.add(team)
-        db.session.commit()
-
-        return team
-
-
-    def to_json(self):
-        team_dict = {'team': {
-                            'id': self.id,
-                            'name': self.name,
-                            'owner': self.owner.to_json(),
-                            'players': []
-                        }}
-        for player in self.players:
-            team_dict['team']['players'].append(player.to_json())
-
-        return team_dict
-
-    @staticmethod
-    def teams_to_json(gameid=None): 
-        teams = Team.query
-        if gameid is None:
-            teams = teams.all()
-        else:
-            game = Game.query.filter_by(id=gameid).first()
-            if game is not None:
-                teams = teams.filter_by(game=game).all()
-            else: 
-                teams = []
-
-        team_dict = {'teams': []}
-        for team in teams:
-            team_dict['teams'].append(team.to_json())
-
-        return team_dict
-
-    def __repr__(self):
-        return f"Team {self.name}"
-
-
-
-
-@app.route("/games", methods=['GET', 'POST'])
+    """ 
+        Go deeper into the dictionary layer by layer 
+        and return the value of the key or None
+    """
+    if not d:
+        return None
+
+    d_inner = d
+    for key in key_list:
+        d_inner = d_inner.get(key)
+        if d_inner is None:
+            return None
+
+    return d_inner
+
+
+@api_routes.route("/games", methods=['GET', 'POST'])
 def games():
+    """end-point for creating games and getting game info."""
 
-	if request.method == 'GET':				
-		return jsonify(Game.games_to_json()) 
+    if request.method == 'GET':				
+        return jsonify(Game.games_to_json()) 
 
-	if request.method == 'POST':
-		pjson = request.get_json()
-		player = pjson.get('player')
-		print(f"player: {player}")
-		if player is not None:
-			if player.get('id') is not None:
-				db_player = Player.query.filter_by(id=player.get('id')).first()
-				if db_player is not None:
-					game = Game.new_game(db_player)
-					return jsonify({
-									'game': {
-												'id':game.id,
-												'url': url_for('game', id=game.id)
-												}								
-									})
+    if request.method == 'POST':
+        pjson = request.get_json()
+        # player id 
+        player_id = get_from_dict(pjson, ['player', 'id'])
+        if player_id is not None:	
+            db_player = Player.query.filter_by(id=player_id).first()
+            if db_player is not None:
+                game = Game.new_game(db_player)
+                response = jsonify(game.to_json())
+                response.status_code = RESOURCE_CREATED
+                response.headers['location'] = 'games/game' + str(game.id)
+                return response
 
-	return jsonify(''), UNPROCESSABLE
+    return jsonify(''), UNPROCESSABLE
 
 
-@app.route("/games/game<id>", methods=['PATCH', 'DELETE'])
+@api_routes.route("/games/game<id>", methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 def game(id):
+    """End-point for accessing a specific game."""
+
+    # get the json body
+    rjson = request.get_json()
 	
-	# owner can update game name 
-	if request.method == 'PATCH':
-		pass
+    # patch is used for a quite a lot
+    # 1. if the request body contains 'game',
+    # it can be used to update the game properties.
+    # 2. if the request body containes 'del_player'
+    # it is used to remove the player from the game
+    if request.method == 'PATCH':
 
-	# owner can delete the game
-	if request.method == 'DELETE':
-		pass
+        game = Game.by_id(id)
 
-@app.route("/games/game<gameid>/teams", methods=['GET', 'POST'])
+        # trying to modify non-existing game
+        if game is None:
+            return jsonify(), UNPROCESSABLE
+
+        # remove player from game and team
+        pid = get_from_dict(rjson, ['del_player', 'id'])        
+        player = Player.by_id(pid)
+        if player is not None:
+
+            # cannot leave from game player is not in
+            if player.game is not game:
+                return jsonify(), PRECONDITION_FAILED
+
+            # The teams are under the game, leave the team 
+            # if owner of the team, team disbands
+            if player.team is not None:                
+                if player is player.team.owner:
+                    Team.remove_team(player.team)
+
+            # leave the team (if in one)            
+            player.leave_team()            
+
+            # leave game
+            player.leave_game()
+
+            return jsonify(), SUCCESS
+
+        else:
+            return jsonify(), UNPROCESSABLE
+
+      
+    # send out info for this game specifically
+    if request.method == 'GET':
+        # find the game
+        game = Game.by_id(id)
+        # only send out info of existing games
+        if game is not None:
+            return jsonify(game.to_json())
+        else:
+            return jsonify(), UNPROCESSABLE
+
+    # people can join the game
+    if request.method == 'PUT':
+        # find the game
+        game = Game.by_id(id)
+        # id of the player wanting to join
+        pid = get_from_dict(rjson, ['player', 'id'])        
+        player = Player.by_id(pid)
+        # only add existing player to existing game
+        if game is None or player is None:
+            return jsonify(), UNPROCESSABLE
+
+        # cannot add player twice
+        if player in game.players:
+            return jsonify(), UNPROCESSABLE
+
+        game.add_player(player)
+        return jsonify(), SUCCESS
+        
+    # owner can delete the game
+    if request.method == 'DELETE':
+        
+        # player wanting to delete the game
+        player_id = get_from_dict(rjson, ['player', 'id'])
+        player = Player.by_id(player_id)
+        # game to be deleted
+        game = Game.by_id(id)
+        if player is None or game is None:
+            return jsonify(), UNPROCESSABLE
+        # only the owner can delete the game
+        if game.owner is not player:
+            return jsonify(), UNAUTHORIZED
+
+        # finally delete the game
+        Game.remove_game(game)
+
+        return jsonify(), SUCCESS
+
+
+@api_routes.route("/games/game<gameid>/teams", methods=['GET', 'POST'])
 def teams(gameid):
 
     rjson = request.get_json()
@@ -283,68 +160,158 @@ def teams(gameid):
         # the new name of the team (if given)
         team_name = get_from_dict(rjson, ['team', 'name'])
 
-        # create team        
-        if player is not None and game is not None:
-            team = Team.new_team(game, player, name=team_name)
-            return jsonify(team.to_json())
-        else:
+        # trying to create with nonexisting player or team
+        if player is None or game is None:
             return jsonify(''), UNPROCESSABLE
+
+        # player has to be in the game the team is being created
+        if player.game is not game:
+            return jsonify(''), PRECONDITION_FAILED
+
+        # create team                
+        team = Team.new_team(game, player, name=team_name)
+        return jsonify(team.to_json())    
 
 
     # get the teams
     if request.method == 'GET':             
         return jsonify(Team.teams_to_json(gameid=gameid))
 
-@app.route("/games/game<gameid>/teams/team<teamid>", methods=['PATCH'])
+@api_routes.route("/games/game<gameid>/teams/team<teamid>", methods=['PUT', 'PATCH', 'GET', 'DELETE'])
 def team(gameid, teamid):
 
-	# add a player to the team
-	if request.method == 'PATCH':
-		pass
+    rjson = request.get_json()
+
+    # players can join the team
+    if request.method == 'PUT':
+        # get the player wanting to join
+        pid = get_from_dict(rjson, ['player', 'id'])
+        player = Player.by_id(pid)
+
+        # get the target game
+        game = Game.by_id(gameid)
+
+        # get the target team
+        team = Team.by_id(teamid)
+
+        # cannot join nonexisting game
+        if player is None or game is None or team is None:
+            return jsonify(), PRECONDITION_FAILED
+
+        # cannot add player twice
+        if player in team.players:
+            return jsonify(), PRECONDITION_FAILED
+
+        # add player only to team in the game they are in
+        if player.game is not team.game:
+            return jsonify(), PRECONDITION_FAILED
+        
+        team.add_player(player)
+        return jsonify(), SUCCESS
+
+        
+    # If the request body containes 'del_player'
+    # it is used to remove the player from the team
+    if request.method == 'PATCH':
+
+        game = Game.by_id(gameid)
+        team = Team.by_id(teamid)
+
+        # trying to modify non-existing game
+        if game is None or team is None:
+            return jsonify(), UNPROCESSABLE
+
+        # remove player from team
+        pid = get_from_dict(rjson, ['del_player', 'id'])        
+        player = Player.by_id(pid)
+        if player is not None:
+
+            # cannot leave from game or team player is not in
+            if player.game is not game or player.team is not team:
+                return jsonify(), PRECONDITION_FAILED
+
+            # if owner of the team, team disbands
+            if player is player.team.owner:
+                Team.remove_team(player.team)
+
+            # leave the team (if in one)            
+            player.leave_team()            
+
+            return jsonify(), SUCCESS
+
+        return jsonify(), UNPROCESSABLE
+
+    # return team info
+    if request.method == 'GET':
+        team = Team.by_id(teamid)
+        if team is not None:
+            return jsonify(team.to_json())
+        else:
+            return jsonify(), UNPROCESSABLE
+
+    # owner can remove team
+    if request.method == 'DELETE':
+
+        # player wanting to delete the game
+        player_id = get_from_dict(rjson, ['player', 'id'])
+        player = Player.by_id(player_id)
+        
+        # game to be deleted
+        team = Team.by_id(teamid)
+        if player is None or team is None:
+            return jsonify(), UNPROCESSABLE
+
+        # only the owner can delete the game
+        if team.owner is not player:
+            return jsonify(), UNAUTHORIZED
+
+        # finally delete the game
+        Team.remove_team(team)
+
+        return jsonify(), SUCCESS
 
 
-@app.route("/players", methods=['GET', 'POST'])
+@api_routes.route("/players", methods=['GET', 'POST'])
 def players():
 
-	# just for debugging get all the players
-	if request.method == 'GET':
-		return jsonify(Player.players_to_json()) 
+    # just for debugging get all the players
+    if request.method == 'GET':
+        return jsonify(Player.players_to_json()) 
 	
-	if request.method == 'POST':
-		pjson = request.get_json()
-		name = ""
-		player = pjson.get('player')
-		if player:
-			pname = player.get('name')
-			name = pname if pname else name
+    if request.method == 'POST':
+        pjson = request.get_json()
+        name = get_from_dict(pjson, ['player', 'name'])
+        name = name if name is not None else "anonymous"        
 
-		player = Player(name=name)
+        player = Player(name=name)
 
-		return jsonify(player.to_json())
+        response = jsonify(player.to_json())
+        response.status_code = RESOURCE_CREATED
+        response.headers['location'] = 'players/player'+ str(player.id)
 
-	# after disconnecting
-	if request.method == 'DELETE':
-		pass
+        return response 
 
-@app.route("/players/player<playerid>", methods=['PATCH'])
+    # after disconnecting
+    if request.method == 'DELETE':
+        pass
+
+@api_routes.route("/players/player<playerid>", methods=['PATCH'])
 def player(playerid):
 
-	rjson = request.get_json()
+    rjson = request.get_json()
 
-	# player can update their name
-	if request.method == 'PATCH':
-		phash = get_from_dict(rjson, ['player', 'hash'])
-		new_name = get_from_dict(rjson, ['player', 'name'])
+    # player can update their name
+    if request.method == 'PATCH':
+        new_name = get_from_dict(rjson, ['player', 'name'])
 
-		# update requires player hash corresponding 
-		# to the playerid and the new name
-		if phash is not None and new_name is not None:
-			if Player.auth(playerid, phash):
-				Player.query.filter_by(id=playerid).first().update_name(new_name)
-			else:
-				return jsonify(''), UNAUTHORIZED
-		else:
-			return jsonify(''), UNPROCESSABLE
+        # update requires player hash corresponding 
+        # to the playerid and the new name
+        if new_name is not None:
+            player = Player.query.filter_by(id=playerid).first()
+            player.update_name(new_name)
+            return jsonify(player.to_json()), SUCCESS			
+        else:
+            return jsonify('No name given.'), UNPROCESSABLE
 
 
 

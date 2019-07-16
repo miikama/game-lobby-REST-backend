@@ -1,7 +1,8 @@
 
 
-from krokeapp import app,db
+from krokeapp import db, create_app
 from krokeapp.database import fill_database, init_database
+from krokeapp.config import Config
 
 if __name__ == "__main__":
 
@@ -14,11 +15,18 @@ if __name__ == "__main__":
 	parser.add_argument('--init_data', action='store_true',	                    
 	                    help='Initialize database with dummy data')
 	args = parser.parse_args()
-	
+
+	# init the application config
+	config = Config()
+
+	# create the app	
+	app = create_app(config)
+
 	if args.init_db:
 		init_database(db)
 
 	if args.init_data:
 		fill_database(db)
 
+	# run app
 	app.run()

@@ -5,3 +5,9 @@ __pycache__
 *sublime-workspace
 
 *db
+
+*.pyc
+
+/*.vscode
+
+test/Insomnia_ws.json

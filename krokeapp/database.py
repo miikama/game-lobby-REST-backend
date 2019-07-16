@@ -1,9 +1,7 @@
 
 
 
-from krokeapp import app, db
 from krokeapp.routes import Game,Player,Team
-
 
 
 def init_database(database):	
@@ -22,13 +20,11 @@ def fill_database(database):
 	game2 = Game(name="game2", owner=player3)
 
 	team1 = Team(name="team1", game=game1, owner=player1)
-	team2 = Team(name="team2", game=game1, owner=player1)
+	team2 = Team(name="team2", game=game1, owner=player2)
 	team3 = Team(name="team3", game=game2, owner=player3)
 
 	game1.players.append(player1)
 	game1.players.append(player2)
-
-	game1.teams.append(team2)
 
 	player1.team = team1
 

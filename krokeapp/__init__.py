@@ -11,19 +11,39 @@ from krokeapp.config import Config
 __version__ = 0.1
 
 
-# init flask app
-app = Flask(__name__)
-
-
-# update the application config with our configuration
-Config().update_app_config(app)
-
-
-# init database
-db = SQLAlchemy(app)
+# init database object (does not load or create the database)
+db = SQLAlchemy()
 
 logger = logging.getLogger("Krokeapp")
 logger.setLevel(logging.INFO)
 
 
-from krokeapp import routes
+def create_app(config):
+    """
+        Encapsulate the app creation in a method 
+        to allow creating the application with different 
+        configurations
+    """
+    assert( isinstance(config, Config) )
+
+    # init flask app
+    app = Flask(__name__)
+
+    # update the application config with our configuration
+    config.update_app_config(app)
+
+    # will be disabled in future
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # give the app to the database instance
+    db.init_app(app)
+    
+    # load the application url endpoints
+    from krokeapp.routes import api_routes
+    app.register_blueprint(api_routes)
+
+    return app
+
+
+
+
