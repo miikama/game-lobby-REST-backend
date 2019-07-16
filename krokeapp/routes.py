@@ -26,6 +26,11 @@ def get_from_dict(d, key_list):
 
     return d_inner
 
+@api_routes.route("/")
+@api_routes.route("/index")
+def index():
+    return "<h1>Hello World!</h1>"
+
 
 @api_routes.route("/games", methods=['GET', 'POST'])
 def games():
