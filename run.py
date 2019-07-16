@@ -23,10 +23,10 @@ if __name__ == "__main__":
 	app = create_app(config)
 
 	if args.init_db:
-		init_database(db)
+		init_database(db, app)
 
 	if args.init_data:
-		fill_database(db)
+		fill_database(db, app)
 
 	# run app
 	app.run()

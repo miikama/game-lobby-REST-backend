@@ -30,7 +30,7 @@ def create_app(config):
     app = Flask(__name__)
 
     # update the application config with our configuration
-    config.update_app_config(app)
+    app.config.from_object(config)
 
     # will be disabled in future
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
