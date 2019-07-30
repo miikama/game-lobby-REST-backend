@@ -105,7 +105,7 @@ class TestApi(unittest.TestCase):
 
 		# the database needs an active application
 		with cls.app.app_context():
-			init_database(db)		
+			init_database(db, cls.app)		
 
 	@classmethod
 	def tearDownClass(cls):

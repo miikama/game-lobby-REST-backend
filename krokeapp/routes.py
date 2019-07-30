@@ -7,8 +7,13 @@ from krokeapp import db
 from krokeapp import logger
 from krokeapp.models import Player, Game, Team
 from krokeapp.status_codes import *
+from flask_cors import CORS
 
 api_routes = Blueprint('api', __name__, template_folder='templates')
+
+
+# add cors to the api routes
+CORS(api_routes)
 
 def get_from_dict(d, key_list):
     """ 
