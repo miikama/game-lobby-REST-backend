@@ -15,7 +15,7 @@ from krokeapp import db, create_app
 from krokeapp.config import Config
 from krokeapp.database import fill_database, init_database
 from krokeapp import logger
-from krokeapp.routes import get_from_dict
+from krokeapp.utils import get_from_dict
 from krokeapp.status_codes import *
 
 TEST_DATABASE = "test.db"
@@ -28,7 +28,7 @@ def player_payload(name="", pid=""):
 
 class TestConfig(Config):
 	
-	database_uri = "sqlite:///" + TEST_DATABASE
+	SQLALCHEMY_DATABASE_URI = "sqlite:///" + TEST_DATABASE
 
 class TestApi(unittest.TestCase):
 

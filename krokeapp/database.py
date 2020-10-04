@@ -1,7 +1,7 @@
 
 
 
-from krokeapp.routes import Game,Player,Team
+from krokeapp.models import Game,Player,Team
 from krokeapp import logger
 from sqlalchemy.exc import OperationalError
 import os

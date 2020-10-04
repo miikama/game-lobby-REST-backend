@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import url_for
 
 from krokeapp import db
+from krokeapp.authentication import generate_player_token
 
 
 class Game(db.Model):
@@ -182,6 +183,10 @@ class Player(db.Model):
     created_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     name = db.Column(db.String(30), unique=False, nullable=False)
 
+    # store the user access token
+    token = db.Column(db.String(32), index=True, unique=True)
+    token_expiration = db.Column(db.DateTime)
+
     # a foreign key for the Team owner relationship
     team_id = db.Column(db.Integer, db.ForeignKey(Team.id))
 
@@ -205,12 +210,18 @@ class Player(db.Model):
         db.session.add(self)
         db.session.commit()
 
-    def to_json(self):
-        return { 'player': {
+    def to_json(self, with_token=False):
+        resp = { 'player': {
                             'id': self.id,
                             'name': self.name
                             }
                 }
+        if with_token:
+            resp['player']['token'] = self.token
+        return resp
+
+    def create_token():
+        self.token = generate_player_token()        
 
     @staticmethod
     def players_to_json():
@@ -258,3 +269,16 @@ class Player(db.Model):
 
     def __repr__(self):
         return f"Player {self.name}"
+
+
+class Token(db.Model):    
+    """
+        A database table for storing application tokens
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    created_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)    
+
+    token = db.Column(db.String(32), index=True, unique=True)
+    token_expiration = db.Column(db.DateTime)
+

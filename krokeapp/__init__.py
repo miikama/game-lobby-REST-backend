@@ -39,7 +39,7 @@ def create_app(config):
     db.init_app(app)
     
     # load the application url endpoints
-    from krokeapp.routes import api_routes
+    from krokeapp.apiroutes import api_routes
     app.register_blueprint(api_routes)
 
     return app
